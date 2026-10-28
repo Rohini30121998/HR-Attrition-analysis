@@ -1,0 +1,104 @@
+import pandas as pd
+import numpy as np
+import random
+from datetime import datetime, timedelta
+
+# Lock structural random seeds for data validation consistency
+np.random.seed(42)
+random.seed(42)
+
+# Generate baseline Master IDs
+emp_ids = [f"FNX{str(i).zfill(4)}" for i in range(1001, 1181)] # 180 employees
+dates = pd.date_range(start='2024-10-01', end='2026-09-01', freq='MS')
+
+# =====================================================================
+# SYSTEM 1: FILE FROM HRMS (hrms_employee_profiles.csv)
+# =====================================================================
+print("📦 Generating System 1: HRMS Employee Profiles...")
+hrms_data = []
+genders_dirty = ['Male', 'Female', 'MALE', 'FEMALE', 'F', 'M', None]
+marital_dirty = ['Single', 'Married', 'Divorced', 'S', 'M', 'SINGLE', 'MARRIED']
+
+for i, emp_id in enumerate(emp_ids):
+    age = -5 if i == 7 else (99 if i == 45 else int(np.random.randint(22, 58))) # Structural outliers
+    gender = random.choice(genders_dirty)
+    marital = random.choice(marital_dirty)
+    
+    # Inconsistent date string types mapping
+    h_date_obj = datetime(2024, 10, 1) - timedelta(days=int(np.random.randint(365, 1500)))
+    if i % 3 == 0: hire_date = h_date_obj.strftime('%d/%m/%Y')
+    elif i % 3 == 1: hire_date = h_date_obj.strftime('%Y-%m-%d')
+    else: hire_date = h_date_obj.strftime('%b %d, %Y')
+        
+    hrms_data.append([emp_id, age, gender, marital, hire_date])
+
+df_hrms = pd.DataFrame(hrms_data, columns=['employee_id', 'age', 'gender', 'marital_status', 'hire_date'])
+df_hrms.to_csv('hrms_employee_profiles.csv', index=False)
+
+# =====================================================================
+# SYSTEM 2: FILE FROM PAYROLL (payroll_overtime_logs.csv)
+# =====================================================================
+print("💰 Generating System 2: Payroll & Attendance Logs...")
+payroll_data = []
+salary_map = {'Apprentice': 18000, 'Machine Operator': 28000, 'Senior Technician': 42000, 'Floor Supervisor': 60000}
+roles = ['Apprentice', 'Machine Operator', 'Senior Technician', 'Floor Supervisor']
+
+row_counter = 0
+for current_date in dates:
+    date_str = current_date.strftime('%Y-%m-%d')
+    for emp_id in emp_ids:
+        dept = random.choice(['Forging', 'Threading', 'Heat Treatment', 'Quality Control'])
+        shift = random.choice(['Shift A', 'Shift B', 'Shift C'])
+        role = random.choice(roles)
+        
+        base_salary_val = salary_map[role] + (int(emp_id.replace('FNX','')) % 5 * 1000)
+        
+        # Inconsistent numeric string prefixes (INR vs Rs.)
+        if row_counter % 12 == 0: monthly_base_salary = f"INR {base_salary_val}"
+        elif row_counter % 19 == 0: monthly_base_salary = f"Rs. {base_salary_val}/-"
+        else: monthly_base_salary = str(base_salary_val)
+            
+        ot_hours = np.random.randint(20, 50) if shift == 'Shift C' else np.random.randint(0, 15)
+        if row_counter == 500: ot_hours = -45 # Negative structural anomaly
+        if row_counter == 2500: ot_hours = 999 # Outlier anomaly
+            
+        absent_days = int(np.random.choice([0, 1, 2, 3, 4], p=[0.7, 0.15, 0.08, 0.05, 0.02]))
+        
+        payroll_data.append([date_str, emp_id, dept, shift, role, monthly_base_salary, ot_hours, absent_days])
+        row_counter += 1
+
+df_payroll = pd.DataFrame(payroll_data, columns=['snapshot_date', 'employee_id', 'department', 'shift_type', 'job_role', 'monthly_base_salary', 'overtime_hours', 'absent_days'])
+df_payroll.to_csv('payroll_overtime_logs.csv', index=False)
+
+# =====================================================================
+# SYSTEM 3: FILE FROM PERFORMANCE TOOLS (performance_morale_surveys.csv)
+# =====================================================================
+print("📊 Generating System 3: Performance Management & Morale Data...")
+perf_data = []
+
+row_counter = 0
+for current_date in dates:
+    date_str = current_date.strftime('%Y-%m-%d')
+    for emp_id in emp_ids:
+        job_satisfaction = int(np.random.randint(1, 6))
+        perf_rating = int(np.random.choice([1, 2, 3, 4, 5], p=[0.05, 0.1, 0.6, 0.2, 0.05]))
+        defect_count = int(np.random.randint(0, 6) if job_satisfaction <= 2 else np.random.randint(0, 2))
+        downtime_minutes = int(np.random.choice([0, 15, 30, 60, 120], p=[0.7, 0.15, 0.08, 0.05, 0.02]))
+        safety_incidents = int(np.random.choice([0, 1], p=[0.998, 0.002]))
+        
+        # Messy case variations for target event codes
+        if row_counter % 400 == 0:
+            attrition_status = random.choice(['Yes', 'yes', 'YES', 'Y'])
+        else:
+            attrition_status = random.choice(['No', 'no', 'NO', 'n'])
+            
+        perf_data.append([date_str, emp_id, job_satisfaction, perf_rating, defect_count, downtime_minutes, safety_incidents, attrition_status])
+        row_counter += 1
+
+df_perf = pd.DataFrame(perf_data, columns=['snapshot_date', 'employee_id', 'job_satisfaction_score', 'performance_rating', 'defect_count', 'downtime_minutes', 'safety_incidents', 'attrition_status'])
+
+# Duplicate rows processing injection artifact
+df_perf = pd.concat([df_perf, df_perf.iloc[[100, 500, 1000]]], ignore_index=True)
+df_perf.to_csv('performance_morale_surveys.csv', index=False)
+
+print("\n🎉 Success! All 3 raw software system files have been created.")
